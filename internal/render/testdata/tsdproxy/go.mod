@@ -4,6 +4,11 @@
 // tsdproxy is not required from the operator's own go.mod on purpose: that
 // would raise dozens of the operator's dependencies to the versions tsdproxy
 // uses, for a dependency only one test needs.
+//
+// The go directive below follows tsdproxy's and cannot be lower. The
+// operator's root go.mod must name at least the same Go version: CI installs
+// the root's version, controller-gen ("make manifests") loads every go.mod in
+// the repository including this one, and the test compiles tsdproxy itself.
 module github.com/ramielrowe/tsdproxy-operator/internal/render/testdata/tsdproxy
 
 go 1.26.7

@@ -48,6 +48,11 @@ Tests beyond `make test`:
   (`go get github.com/almeidapaulopt/tsdproxy@<commit>` in that directory)
   and keep it in step with `defaultImage` in `internal/controller/resources.go`.
   `TSDPROXY_SRC=<checkout>` tests against a local tree instead.
+- The root `go.mod`'s `go` directive must be at least the one tsdproxy
+  declares. CI installs the root's Go version with toolchain switching off,
+  and `make manifests` (controller-gen) loads the pin module too, so an older
+  root version fails there with "go.mod requires go >= ...". After bumping
+  the pin, raise the root directive if tsdproxy raised its own.
 - `make test-e2e` runs the stock image on kind with a fake auth key.
 
 ## Project Structure
