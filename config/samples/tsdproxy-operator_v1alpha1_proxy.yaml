@@ -1,0 +1,31 @@
+# One hostname on the tailnet of a TSDProxy instance.
+apiVersion: tsdproxy-operator.apmelton.com/v1alpha1
+kind: Proxy
+metadata:
+  labels:
+    app.kubernetes.io/name: tsdproxy-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: proxy-sample
+spec:
+  instanceRef:
+    name: tsdproxy-sample
+    # namespace: tailnet-system   # when the TSDProxy lives elsewhere
+  # Defaults to the Proxy's name.
+  hostname: sample
+  ports:
+    # https://sample.<tailnet>.ts.net -> Service "sample" in this namespace
+    - port: 443
+      protocol: https
+      target:
+        service:
+          name: sample
+          port: 8080
+    # http://sample.<tailnet>.ts.net redirects to https
+    - port: 80
+      protocol: http
+      redirect: true
+      target:
+        url: https://sample.example.ts.net
+  dashboard:
+    label: Sample
+    category: examples

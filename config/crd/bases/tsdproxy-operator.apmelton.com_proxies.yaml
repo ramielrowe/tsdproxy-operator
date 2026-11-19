@@ -1,0 +1,317 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+  name: proxies.tsdproxy-operator.apmelton.com
+spec:
+  group: tsdproxy-operator.apmelton.com
+  names:
+    kind: Proxy
+    listKind: ProxyList
+    plural: proxies
+    singular: proxy
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.instanceRef.name
+      name: Instance
+      type: string
+    - jsonPath: .status.hostname
+      name: Hostname
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Accepted")].status
+      name: Accepted
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].reason
+      name: Status
+      type: string
+    - jsonPath: .status.url
+      name: URL
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Proxy exposes one hostname on the tailnet of a TSDProxy instance.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: spec defines the desired state of Proxy
+            properties:
+              dashboard:
+                description: dashboard controls how the proxy shows up in the tsdproxy
+                  dashboard.
+                properties:
+                  category:
+                    description: category groups proxies in the dashboard.
+                    type: string
+                  icon:
+                    description: icon shown in the dashboard, for example "sh/jellyfin".
+                    type: string
+                  label:
+                    description: label shown in the dashboard. Defaults to the hostname.
+                    type: string
+                type: object
+              hostname:
+                description: |-
+                  hostname on the tailnet. Defaults to the Proxy's name. Must be unique
+                  among the Proxies attached to the same instance; when two collide, the
+                  oldest keeps the hostname.
+                maxLength: 63
+                pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                type: string
+              instanceRef:
+                description: instanceRef names the TSDProxy this proxy attaches to.
+                properties:
+                  name:
+                    description: name of the TSDProxy.
+                    minLength: 1
+                    type: string
+                  namespace:
+                    description: |-
+                      namespace of the TSDProxy. Defaults to the Proxy's namespace. Another
+                      namespace only works when that TSDProxy's allowedNamespaces admits this
+                      one.
+                    type: string
+                required:
+                - name
+                type: object
+              ports:
+                description: ports exposed on the tailnet hostname.
+                items:
+                  description: ProxyPort exposes one port on the proxy's tailnet hostname.
+                  properties:
+                    funnel:
+                      description: |-
+                        funnel exposes this port to the public internet through Tailscale
+                        Funnel. Only valid for https.
+                      type: boolean
+                    insecureSkipTLSVerify:
+                      description: |-
+                        insecureSkipTLSVerify disables verification of the target's TLS
+                        certificate when the target is https.
+                      type: boolean
+                    port:
+                      description: port number exposed on the tailnet.
+                      format: int32
+                      maximum: 65535
+                      minimum: 1
+                      type: integer
+                    protocol:
+                      default: https
+                      description: protocol spoken on the tailnet.
+                      enum:
+                      - https
+                      - http
+                      - tcp
+                      - udp
+                      type: string
+                    redirect:
+                      description: |-
+                        redirect answers requests with an HTTP redirect to the target URL
+                        instead of proxying.
+                      type: boolean
+                    target:
+                      description: target is where traffic is sent.
+                      properties:
+                        service:
+                          description: service targets a Service in the Proxy's namespace.
+                          properties:
+                            name:
+                              description: name of the Service, in the same namespace
+                                as the Proxy.
+                              minLength: 1
+                              type: string
+                            port:
+                              description: port number of the Service.
+                              format: int32
+                              maximum: 65535
+                              minimum: 1
+                              type: integer
+                            scheme:
+                              description: |-
+                                scheme used to reach the Service. Defaults to http for https and http
+                                ports, tcp for tcp ports and udp for udp ports.
+                              enum:
+                              - http
+                              - https
+                              - tcp
+                              - udp
+                              type: string
+                          required:
+                          - name
+                          - port
+                          type: object
+                        url:
+                          description: |-
+                            url targets an arbitrary URL, for example http://192.168.1.10:8080 or
+                            tcp://db.internal:5432.
+                          pattern: ^[a-z][a-z0-9+.-]*://[^/\s]+.*$
+                          type: string
+                      type: object
+                      x-kubernetes-validations:
+                      - message: exactly one of service or url must be set
+                        rule: has(self.service) != has(self.url)
+                  required:
+                  - port
+                  - target
+                  type: object
+                  x-kubernetes-validations:
+                  - message: funnel requires the https protocol
+                    rule: '!has(self.funnel) || !self.funnel || !has(self.protocol)
+                      || self.protocol == ''https'''
+                  - message: redirect requires a url target
+                    rule: '!has(self.redirect) || !self.redirect || has(self.target.url)'
+                maxItems: 64
+                minItems: 1
+                type: array
+                x-kubernetes-list-map-keys:
+                - port
+                - protocol
+                x-kubernetes-list-type: map
+              tailscale:
+                description: tailscale holds per-proxy Tailscale settings.
+                properties:
+                  ephemeral:
+                    description: |-
+                      ephemeral overrides the instance default for registering this proxy's
+                      device as an ephemeral node.
+                    type: boolean
+                  runWebClient:
+                    description: runWebClient serves the Tailscale web client on the
+                      device.
+                    type: boolean
+                  tags:
+                    description: tags for this proxy's device, replacing the instance's
+                      tags.
+                    items:
+                      pattern: ^tag:[a-zA-Z][a-zA-Z0-9-]*$
+                      type: string
+                    maxItems: 16
+                    type: array
+                    x-kubernetes-list-type: set
+                  verbose:
+                    description: verbose enables verbose Tailscale logging for this
+                      proxy.
+                    type: boolean
+                type: object
+            required:
+            - instanceRef
+            - ports
+            type: object
+          status:
+            description: status defines the observed state of Proxy
+            properties:
+              conditions:
+                description: |-
+                  conditions represent the current state of the Proxy resource.
+
+                  Condition types:
+                  - "Accepted": the proxy is rendered into its instance's proxy list
+                  - "Ready": tsdproxy reports the proxy as running
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              health:
+                description: health is the backend health reported by tsdproxy.
+                type: string
+              hostname:
+                description: hostname is the tailnet hostname in effect.
+                type: string
+              observedGeneration:
+                description: observedGeneration is the generation last reconciled.
+                format: int64
+                type: integer
+              state:
+                description: |-
+                  state is the proxy state reported by tsdproxy, for example Running or
+                  Authenticating.
+                type: string
+              url:
+                description: |-
+                  url is the proxy's tailnet URL as reported by tsdproxy. While the
+                  device waits for interactive login it is the login URL instead.
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

@@ -1,0 +1,33 @@
+# One tsdproxy instance joined to one tailnet.
+#
+# Create the credentials Secret first, for example:
+#   kubectl create secret generic tailscale-oauth \
+#     --from-literal=client_id=... --from-literal=client_secret=...
+apiVersion: tsdproxy-operator.apmelton.com/v1alpha1
+kind: TSDProxy
+metadata:
+  labels:
+    app.kubernetes.io/name: tsdproxy-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: tsdproxy-sample
+spec:
+  tailscale:
+    # An OAuth client lets tsdproxy mint a one-time auth key per device. It
+    # needs the auth_keys scope and must own the tags below.
+    oauth:
+      secretName: tailscale-oauth
+    tags:
+      - tag:k8s
+    # Alternatively, a reusable auth key:
+    # authKey:
+    #   name: tailscale-authkey
+    #   key: authkey
+  # Namespaces whose Proxies may attach. The instance's own namespace always
+  # may; this adds every namespace labelled tailnet=sample.
+  allowedNamespaces:
+    from: Selector
+    selector:
+      matchLabels:
+        tailnet: sample
+  storage:
+    size: 1Gi

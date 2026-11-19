@@ -1,0 +1,120 @@
+// This file is not part of the operator build. TestTSDProxyCompat copies it
+// into tsdproxy's internal/targetproviders/list package, in a temporary copy
+// of tsdproxy's source, so that the operator's rendered proxies.yaml is parsed
+// by tsdproxy's own list provider and the resulting proxy configuration is
+// compared with what the Proxy resources asked for.
+
+package list
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/rs/zerolog"
+
+	"github.com/almeidapaulopt/tsdproxy/internal/config"
+	"github.com/almeidapaulopt/tsdproxy/internal/model"
+)
+
+type compatPort struct {
+	Protocol    string `json:"protocol"`
+	Port        int    `json:"port"`
+	Target      string `json:"target"`
+	TLSValidate bool   `json:"tlsValidate"`
+	IsRedirect  bool   `json:"isRedirect"`
+	Funnel      bool   `json:"funnel"`
+}
+
+type compatProxy struct {
+	Ports        map[string]compatPort `json:"ports"`
+	Tags         string                `json:"tags"`
+	Icon         string                `json:"icon"`
+	Label        string                `json:"label"`
+	Category     string                `json:"category"`
+	Ephemeral    bool                  `json:"ephemeral"`
+	RunWebClient bool                  `json:"runWebClient"`
+	Verbose      bool                  `json:"verbose"`
+}
+
+func TestOperatorCompat(t *testing.T) {
+	dir := os.Getenv("OPERATOR_COMPAT_DIR")
+	if dir == "" {
+		t.Skip("OPERATOR_COMPAT_DIR not set")
+	}
+
+	raw, err := os.ReadFile(filepath.Join(dir, "expect.json"))
+	if err != nil {
+		t.Fatalf("read expectations: %v", err)
+	}
+	var expect map[string]compatProxy
+	if err := json.Unmarshal(raw, &expect); err != nil {
+		t.Fatalf("parse expectations: %v", err)
+	}
+
+	c, err := New(zerolog.Nop(), "kubernetes", &config.ListTargetProviderConfig{
+		Filename:             filepath.Join(dir, "proxies.yaml"),
+		DefaultProxyProvider: "default",
+	})
+	if err != nil {
+		t.Fatalf("list provider rejected proxies.yaml: %v", err)
+	}
+	if len(c.configProxies) != len(expect) {
+		t.Fatalf("list has %d proxies, want %d", len(c.configProxies), len(expect))
+	}
+
+	for name, want := range expect {
+		t.Run(name, func(t *testing.T) {
+			cfg, err := c.AddTarget(name)
+			if err != nil {
+				t.Fatalf("AddTarget: %v", err)
+			}
+			if err := model.ValidateProxyPorts(cfg); err != nil {
+				t.Errorf("ValidateProxyPorts: %v", err)
+			}
+			if cfg.Hostname != name || cfg.ProxyProvider != "default" {
+				t.Errorf("hostname=%q proxyProvider=%q", cfg.Hostname, cfg.ProxyProvider)
+			}
+			if cfg.Tailscale.Tags != want.Tags || cfg.Tailscale.Ephemeral != want.Ephemeral ||
+				cfg.Tailscale.RunWebClient != want.RunWebClient || cfg.Tailscale.Verbose != want.Verbose {
+				t.Errorf("tailscale = %+v, want %+v", cfg.Tailscale, want)
+			}
+			if cfg.Tailscale.AuthKey.Value() != "" {
+				t.Error("list entry carries an auth key")
+			}
+			if !cfg.Dashboard.Visible {
+				t.Error("proxy is hidden from the dashboard and REST API")
+			}
+			if cfg.Dashboard.Icon != want.Icon || cfg.Dashboard.Label != want.Label ||
+				cfg.Dashboard.Category != want.Category {
+				t.Errorf("dashboard = %+v, want icon=%q label=%q category=%q",
+					cfg.Dashboard, want.Icon, want.Label, want.Category)
+			}
+
+			// A port tsdproxy fails to parse is logged and dropped, so the
+			// count catches silently missing ports.
+			if len(cfg.Ports) != len(want.Ports) {
+				t.Fatalf("got %d ports, want %d", len(cfg.Ports), len(want.Ports))
+			}
+			for key, wp := range want.Ports {
+				got, ok := cfg.Ports[key]
+				if !ok {
+					t.Errorf("port %q missing", key)
+					continue
+				}
+				if got.ProxyProtocol != wp.Protocol || got.ProxyPort != wp.Port {
+					t.Errorf("port %q parsed as %d/%s", key, got.ProxyPort, got.ProxyProtocol)
+				}
+				if got.GetFirstTargetString() != wp.Target {
+					t.Errorf("port %q target = %q, want %q", key, got.GetFirstTargetString(), wp.Target)
+				}
+				if got.TLSValidate != wp.TLSValidate || got.IsRedirect != wp.IsRedirect ||
+					got.Tailscale.Funnel != wp.Funnel {
+					t.Errorf("port %q = tlsValidate:%v isRedirect:%v funnel:%v, want %+v",
+						key, got.TLSValidate, got.IsRedirect, got.Tailscale.Funnel, wp)
+				}
+			}
+		})
+	}
+}

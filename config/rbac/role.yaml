@@ -1,0 +1,76 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - secrets
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+  - patch
+- apiGroups:
+  - apps
+  resources:
+  - statefulsets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - tsdproxy-operator.apmelton.com
+  resources:
+  - proxies
+  - tsdproxies
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - tsdproxy-operator.apmelton.com
+  resources:
+  - proxies/finalizers
+  - tsdproxies/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - tsdproxy-operator.apmelton.com
+  resources:
+  - proxies/status
+  - tsdproxies/status
+  verbs:
+  - get
+  - patch
+  - update

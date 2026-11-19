@@ -1,0 +1,516 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+  name: tsdproxies.tsdproxy-operator.apmelton.com
+spec:
+  group: tsdproxy-operator.apmelton.com
+  names:
+    kind: TSDProxy
+    listKind: TSDProxyList
+    plural: tsdproxies
+    singular: tsdproxy
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.tailscale.mode
+      name: Mode
+      type: string
+    - jsonPath: .status.attachedProxies
+      name: Proxies
+      type: integer
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: TSDProxy is one tsdproxy instance joined to one tailnet.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: spec defines the desired state of TSDProxy
+            properties:
+              admins:
+                description: |-
+                  admins lists Tailscale user IDs allowed to use admin actions in the
+                  tsdproxy dashboard. When empty, every tailnet user reaching the
+                  dashboard is an admin.
+                items:
+                  type: string
+                type: array
+                x-kubernetes-list-type: set
+              allowedNamespaces:
+                description: |-
+                  allowedNamespaces controls which namespaces may attach Proxies to this
+                  instance. Defaults to the instance's own namespace only.
+                properties:
+                  from:
+                    default: Same
+                    description: from selects the namespaces that may attach Proxies
+                      to this instance.
+                    enum:
+                    - Same
+                    - All
+                    - Selector
+                    type: string
+                  selector:
+                    description: |-
+                      selector matches namespace labels. Only used when from is Selector. The
+                      instance's own namespace is always allowed.
+                    properties:
+                      matchExpressions:
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
+                        items:
+                          description: |-
+                            A label selector requirement is a selector that contains values, a key, and an operator that
+                            relates the key and values.
+                          properties:
+                            key:
+                              description: key is the label key that the selector
+                                applies to.
+                              type: string
+                            operator:
+                              description: |-
+                                operator represents a key's relationship to a set of values.
+                                Valid operators are In, NotIn, Exists and DoesNotExist.
+                              type: string
+                            values:
+                              description: |-
+                                values is an array of string values. If the operator is In or NotIn,
+                                the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                the values array must be empty. This array is replaced during a strategic
+                                merge patch.
+                              items:
+                                type: string
+                              type: array
+                              x-kubernetes-list-type: atomic
+                          required:
+                          - key
+                          - operator
+                          type: object
+                        type: array
+                        x-kubernetes-list-type: atomic
+                      matchLabels:
+                        additionalProperties:
+                          type: string
+                        description: |-
+                          matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                          map is equivalent to an element of matchExpressions, whose key field is "key", the
+                          operator is "In", and the values array contains only "value". The requirements are ANDed.
+                        type: object
+                    type: object
+                    x-kubernetes-map-type: atomic
+                type: object
+                x-kubernetes-validations:
+                - message: selector is required when from is Selector
+                  rule: '!has(self.from) || self.from != ''Selector'' || has(self.selector)'
+              image:
+                default: ghcr.io/almeidapaulopt/tsdproxy:3.0.0-beta.4
+                description: |-
+                  image is the tsdproxy container image. The operator renders
+                  configuration for tsdproxy v3.
+                minLength: 1
+                type: string
+              imagePullPolicy:
+                description: imagePullPolicy for the tsdproxy container.
+                enum:
+                - Always
+                - IfNotPresent
+                - Never
+                type: string
+              log:
+                description: log configures tsdproxy logging.
+                properties:
+                  json:
+                    description: json switches tsdproxy to JSON log output.
+                    type: boolean
+                  level:
+                    default: info
+                    description: level is the tsdproxy log level.
+                    enum:
+                    - trace
+                    - debug
+                    - info
+                    - warn
+                    - error
+                    type: string
+                type: object
+              nodeSelector:
+                additionalProperties:
+                  type: string
+                description: nodeSelector of the tsdproxy pod.
+                type: object
+              resources:
+                description: resources of the tsdproxy container.
+                properties:
+                  claims:
+                    description: |-
+                      Claims lists the names of resources, defined in spec.resourceClaims,
+                      that are used by this container.
+
+                      This field depends on the
+                      DynamicResourceAllocation feature gate.
+
+                      This field is immutable. It can only be set for containers.
+                    items:
+                      description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                      properties:
+                        name:
+                          description: |-
+                            Name must match the name of one entry in pod.spec.resourceClaims of
+                            the Pod where this field is used. It makes that resource available
+                            inside a container.
+                          type: string
+                        request:
+                          description: |-
+                            Request is the name chosen for a request in the referenced claim.
+                            If empty, everything from the claim is made available, otherwise
+                            only the result of this request.
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  limits:
+                    additionalProperties:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    description: |-
+                      Limits describes the maximum amount of compute resources allowed.
+                      More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                    type: object
+                  requests:
+                    additionalProperties:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    description: |-
+                      Requests describes the minimum amount of compute resources required.
+                      If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                      otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                      More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                    type: object
+                type: object
+              storage:
+                description: storage configures the data directory. Immutable once
+                  set.
+                properties:
+                  size:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    default: 1Gi
+                    description: size of the PersistentVolumeClaim.
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  storageClassName:
+                    description: |-
+                      storageClassName of the PersistentVolumeClaim. Unset uses the cluster
+                      default.
+                    type: string
+                  type:
+                    default: PersistentVolumeClaim
+                    description: type selects what backs the data directory.
+                    enum:
+                    - PersistentVolumeClaim
+                    - EmptyDir
+                    type: string
+                type: object
+              tailscale:
+                description: tailscale configures the tailnet this instance joins.
+                properties:
+                  authKey:
+                    description: |-
+                      authKey references a Secret key holding a Tailscale auth key. In
+                      PerProxy mode every Proxy registers its own device with this key, so it
+                      must be reusable.
+                    properties:
+                      key:
+                        description: The key of the secret to select from.  Must be
+                          a valid secret key.
+                        type: string
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                      optional:
+                        description: Specify whether the Secret or its key must be
+                          defined
+                        type: boolean
+                    required:
+                    - key
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  autoApproveDevices:
+                    description: |-
+                      autoApproveDevices approves the instance's device automatically.
+                      Services mode only.
+                    type: boolean
+                  autoProvisionACL:
+                    description: |-
+                      autoProvisionACL lets tsdproxy add the tags to the tailnet policy's
+                      tagOwners. Requires oauth with policy scopes.
+                    type: boolean
+                  autoRemoveConflicts:
+                    description: |-
+                      autoRemoveConflicts removes conflicting VIP Services automatically.
+                      Services mode only.
+                    type: boolean
+                  controlURL:
+                    description: |-
+                      controlURL overrides the Tailscale control server, for example to use
+                      Headscale. Defaults to Tailscale's hosted control plane.
+                    pattern: ^https?://.+$
+                    type: string
+                  ephemeral:
+                    description: |-
+                      ephemeral is the default for whether proxy devices register as
+                      ephemeral nodes, which Tailscale removes shortly after they go offline.
+                      A Proxy can override it.
+                    type: boolean
+                  hostname:
+                    description: |-
+                      hostname is the tailnet hostname of the instance's own device. Only
+                      used, and required, in Services mode.
+                    maxLength: 63
+                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                    type: string
+                  mode:
+                    default: PerProxy
+                    description: mode selects how proxies are exposed on the tailnet.
+                    enum:
+                    - PerProxy
+                    - Services
+                    type: string
+                  oauth:
+                    description: |-
+                      oauth references a Secret holding a Tailscale OAuth client. tsdproxy
+                      mints a one-time auth key per device from it.
+                    properties:
+                      clientIDKey:
+                        default: client_id
+                        description: clientIDKey is the Secret key holding the OAuth
+                          client ID.
+                        minLength: 1
+                        type: string
+                      clientSecretKey:
+                        default: client_secret
+                        description: clientSecretKey is the Secret key holding the
+                          OAuth client secret.
+                        minLength: 1
+                        type: string
+                      secretName:
+                        description: secretName is the name of a Secret in the TSDProxy's
+                          namespace.
+                        minLength: 1
+                        type: string
+                    required:
+                    - secretName
+                    type: object
+                  preventDuplicates:
+                    description: |-
+                      preventDuplicates makes tsdproxy delete a stale tailnet device with the
+                      same hostname before registering a new one. Requires oauth.
+                    type: boolean
+                  tags:
+                    description: |-
+                      tags applied to every device of this instance. A Proxy can override
+                      them. Required with oauth.
+                    items:
+                      pattern: ^tag:[a-zA-Z][a-zA-Z0-9-]*$
+                      type: string
+                    maxItems: 16
+                    type: array
+                    x-kubernetes-list-type: set
+                type: object
+                x-kubernetes-validations:
+                - message: exactly one of authKey or oauth must be set
+                  rule: has(self.authKey) != has(self.oauth)
+                - message: 'oauth requires at least one tag: Tailscale only issues
+                    OAuth auth keys for tagged devices'
+                  rule: '!has(self.oauth) || (has(self.tags) && size(self.tags) >
+                    0)'
+                - message: Services mode requires oauth and hostname
+                  rule: '!has(self.mode) || self.mode != ''Services'' || (has(self.oauth)
+                    && has(self.hostname))'
+              tolerations:
+                description: tolerations of the tsdproxy pod.
+                items:
+                  description: |-
+                    The pod this Toleration is attached to tolerates any taint that matches
+                    the triple <key,value,effect> using the matching operator <operator>.
+                  properties:
+                    effect:
+                      description: |-
+                        Effect indicates the taint effect to match. Empty means match all taint effects.
+                        When specified, allowed values are NoSchedule, PreferNoSchedule and NoExecute.
+                      type: string
+                    key:
+                      description: |-
+                        Key is the taint key that the toleration applies to. Empty means match all taint keys.
+                        If the key is empty, operator must be Exists; this combination means to match all values and all keys.
+                      type: string
+                    operator:
+                      description: |-
+                        Operator represents a key's relationship to the value.
+                        Valid operators are Exists, Equal, Lt, and Gt. Defaults to Equal.
+                        Exists is equivalent to wildcard for value, so that a pod can
+                        tolerate all taints of a particular category.
+                        Lt and Gt perform numeric comparisons (requires feature gate TaintTolerationComparisonOperators).
+                      type: string
+                    tolerationSeconds:
+                      description: |-
+                        TolerationSeconds represents the period of time the toleration (which must be
+                        of effect NoExecute, otherwise this field is ignored) tolerates the taint. By default,
+                        it is not set, which means tolerate the taint forever (do not evict). Zero and
+                        negative values will be treated as 0 (evict immediately) by the system.
+                      format: int64
+                      type: integer
+                    value:
+                      description: |-
+                        Value is the taint value the toleration matches to.
+                        If the operator is Exists, the value should be empty, otherwise just a regular string.
+                      type: string
+                  type: object
+                type: array
+                x-kubernetes-list-type: atomic
+            required:
+            - tailscale
+            type: object
+            x-kubernetes-validations:
+            - message: storage is immutable
+              rule: has(self.storage) == has(oldSelf.storage) && (!has(self.storage)
+                || self.storage == oldSelf.storage)
+          status:
+            description: status defines the observed state of TSDProxy
+            properties:
+              attachedProxies:
+                description: |-
+                  attachedProxies is the number of Proxies rendered into this instance's
+                  proxy list.
+                format: int32
+                type: integer
+              conditions:
+                description: |-
+                  conditions represent the current state of the TSDProxy resource.
+
+                  Condition types:
+                  - "Ready": the tsdproxy pod is running with the current configuration
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              configHash:
+                description: |-
+                  configHash identifies the startup configuration the pod was last
+                  rolled for. It changes when the instance restarts, not when proxies
+                  are added or removed.
+                type: string
+              observedGeneration:
+                description: observedGeneration is the generation last reconciled.
+                format: int64
+                type: integer
+            type: object
+        required:
+        - spec
+        type: object
+        x-kubernetes-validations:
+        - message: 'metadata.name must be at most 40 characters: it prefixes the names
+            of the StatefulSet, Service and pod'
+          rule: size(self.metadata.name) <= 40
+        - message: metadata.name must be a DNS label
+          rule: self.metadata.name.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$')
+    served: true
+    storage: true
+    subresources:
+      status: {}

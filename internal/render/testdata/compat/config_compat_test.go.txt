@@ -1,0 +1,99 @@
+// This file is not part of the operator build. TestTSDProxyCompat copies it
+// into tsdproxy's internal/config package, in a temporary copy of tsdproxy's
+// source, so that the operator's rendered tsdproxy.yaml is loaded and
+// validated by tsdproxy's own code, following the same steps as
+// config.InitializeConfig.
+
+package config
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/creasty/defaults"
+	"github.com/rs/zerolog"
+)
+
+func TestOperatorCompat(t *testing.T) {
+	dir := os.Getenv("OPERATOR_COMPAT_DIR")
+	if dir == "" {
+		t.Skip("OPERATOR_COMPAT_DIR not set")
+	}
+
+	files, err := filepath.Glob(filepath.Join(dir, "main-*.yaml"))
+	if err != nil || len(files) == 0 {
+		t.Fatalf("no main-*.yaml fixtures in %s (err=%v)", dir, err)
+	}
+
+	for _, file := range files {
+		t.Run(filepath.Base(file), func(t *testing.T) {
+			// The pod only sets the client ID variable for OAuth instances.
+			if strings.Contains(filepath.Base(file), "oauth") {
+				t.Setenv("TSDPROXY_TAILSCALE_DEFAULT_CLIENTID", "compat-client-id")
+			}
+
+			log := zerolog.Nop()
+			cfg := &Data{}
+			cfg.Tailscale.Providers = make(map[string]*TailscaleServerConfig)
+			cfg.Docker = make(map[string]*DockerTargetProviderConfig)
+			cfg.Lists = make(map[string]*ListTargetProviderConfig)
+			cfg.Incus = make(map[string]*IncusTargetProviderConfig)
+			cfg.Proxmox = make(map[string]*ProxmoxTargetProviderConfig)
+			cfg.DNSProviders = make(map[string]*DNSProviderConfig)
+			cfg.TLSProviders = make(map[string]*TLSProviderConfig)
+
+			if err := NewConfigFile(log, file, cfg).Load(); err != nil {
+				t.Fatalf("load: %v", err)
+			}
+			if err := defaults.Set(cfg); err != nil {
+				t.Fatalf("defaults: %v", err)
+			}
+			if err := cfg.loadSecretsFromFiles(); err != nil {
+				t.Fatalf("secrets: %v", err)
+			}
+			cfg.loadTailscaleAuthKeyEnvOverrides()
+			cfg.LoadTailscaleEnvOverrides()
+			if err := cfg.validate(log); err != nil {
+				t.Fatalf("validate: %v", err)
+			}
+
+			if cfg.HTTP.Hostname != "0.0.0.0" || cfg.HTTP.Port != 8080 {
+				t.Errorf("http = %s:%d, want 0.0.0.0:8080", cfg.HTTP.Hostname, cfg.HTTP.Port)
+			}
+			if cfg.AdminAllowLocalhost {
+				t.Error("adminAllowLocalhost is enabled")
+			}
+			if cfg.APIKey.Value() != "compat-api-key" {
+				t.Errorf("apiKey not loaded from apiKeyFile, got %q", cfg.APIKey.Value())
+			}
+			if len(cfg.Docker)+len(cfg.Incus)+len(cfg.Proxmox) != 0 {
+				t.Error("unexpected non-list target providers")
+			}
+			list, ok := cfg.Lists["kubernetes"]
+			if !ok || len(cfg.Lists) != 1 {
+				t.Fatalf("lists = %v, want exactly \"kubernetes\"", cfg.Lists)
+			}
+			if list.DefaultProxyProvider != "default" {
+				t.Errorf("list defaultProxyProvider = %q", list.DefaultProxyProvider)
+			}
+
+			p, ok := cfg.Tailscale.Providers["default"]
+			if !ok || len(cfg.Tailscale.Providers) != 1 {
+				t.Fatalf("providers = %v, want exactly \"default\"", cfg.Tailscale.Providers)
+			}
+			if strings.Contains(filepath.Base(file), "oauth") {
+				if !hasOAuthCredentials(p) || p.ClientSecret.Value() != "compat-client-secret" {
+					t.Error("OAuth credentials not resolved from clientSecretFile and environment")
+				}
+				if !p.Services || p.Hostname == "" || p.Tags == "" {
+					t.Errorf("services provider incomplete: services=%v hostname=%q tags=%q",
+						p.Services, p.Hostname, p.Tags)
+				}
+			} else if p.AuthKey.Value() != "compat-authkey" {
+				t.Errorf("authKey not loaded from authKeyFile, got %q", p.AuthKey.Value())
+			}
+		})
+	}
+}
