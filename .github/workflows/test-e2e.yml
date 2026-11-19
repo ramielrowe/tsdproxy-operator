@@ -1,8 +1,13 @@
 name: E2E Tests
 
+# Pushes to main and version tags are not listed here: publish.yml runs this
+# workflow for them, as a gate in front of publishing the image.
 on:
   push:
+    branches-ignore:
+      - main
   pull_request:
+  workflow_call:
 
 permissions: {}
 
@@ -25,7 +30,7 @@ jobs:
 
       - name: Install the latest version of kind
         run: |
-          curl -Lo ./kind https://kind.sigs.k8s.io/dl/latest/kind-linux-$(go env GOARCH)
+          curl -Lo ./kind "https://kind.sigs.k8s.io/dl/latest/kind-linux-$(go env GOARCH)"
           chmod +x ./kind
           sudo mv ./kind /usr/local/bin/kind
 

@@ -1,8 +1,13 @@
 name: Lint
 
+# Pushes to main and version tags are not listed here: publish.yml runs this
+# workflow for them, as a gate in front of publishing the image.
 on:
   push:
+    branches-ignore:
+      - main
   pull_request:
+  workflow_call:
 
 permissions: {}
 

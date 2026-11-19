@@ -38,8 +38,15 @@ Install the CRDs and the operator:
 
 ```sh
 make install
-make deploy IMG=<registry>/tsdproxy-operator:<tag>
+make deploy IMG=ghcr.io/ramielrowe/tsdproxy-operator:main
 ```
+
+Images for amd64 and arm64 are published to
+`ghcr.io/ramielrowe/tsdproxy-operator` by the `Publish Image` workflow, once
+lint, the tests and the e2e suite pass for that commit:
+`main` and `sha-<commit>` for every push to `main`, and `<version>`,
+`<major>.<minor>` and `latest` for a `v<version>` tag. While the package is
+private, the operator's namespace needs an image pull secret for ghcr.io.
 
 Create an instance. With an OAuth client, tsdproxy mints a one-time auth key
 for each device; the client needs the `auth_keys` scope and must own the tags.
